@@ -14,6 +14,10 @@ class LocationViewModel : ViewModel() {
     private val _lowPowerMode = mutableStateOf(false)
     val lowPowerMode: State<Boolean> = _lowPowerMode
 
+    private val _gpsLoggingEnabled = mutableStateOf(true)
+
+    val gpsLoggingEnabled: State<Boolean> = _gpsLoggingEnabled
+
     fun updateLocationText(text: String) {
         _locationText.value = text
     }
@@ -25,4 +29,10 @@ class LocationViewModel : ViewModel() {
     fun toggleLowPowerMode(enabled: Boolean) {
         _lowPowerMode.value = enabled
     }
+
+    fun toggleGpsLogging(enabled: Boolean) {
+        _gpsLoggingEnabled.value = enabled
+        SharedState.gpsLoggingEnabled = enabled
+    }
+
 }

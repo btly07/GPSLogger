@@ -10,7 +10,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun LocationScreen(viewModel: LocationViewModel, onLowPowerToggle: (Boolean) -> Unit) {
+fun LocationScreen(
+    viewModel: LocationViewModel,
+    onLowPowerToggle: (Boolean) -> Unit,
+    onGpsLoggingToggle: (Boolean) -> Unit
+) {
     Column(modifier = Modifier
         .fillMaxSize()
         .padding(16.dp)) {
@@ -47,16 +51,42 @@ fun LocationScreen(viewModel: LocationViewModel, onLowPowerToggle: (Boolean) -> 
                     onLowPowerToggle(isChecked)
                 },
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color(0xFF66BB6A),     // 明るい緑
-                    checkedTrackColor = Color(0xFF388E3C),     // 濃い緑
-                    uncheckedThumbColor = Color(0xFFCCCCCC),   // 薄グレー
-                    uncheckedTrackColor = Color(0xFF888888),   // やや明るい濃グレー
+                    checkedThumbColor = Color(0xFF66BB6A),
+                    checkedTrackColor = Color(0xFF388E3C),
+                    uncheckedThumbColor = Color(0xFFCCCCCC),
+                    uncheckedTrackColor = Color(0xFF888888),
                     disabledCheckedThumbColor = Color(0xFFA5D6A7),
                     disabledCheckedTrackColor = Color(0xFF81C784),
                     disabledUncheckedThumbColor = Color(0xFFEEEEEE),
                     disabledUncheckedTrackColor = Color(0xFFBDBDBD)
                 )
+            )
+        }
 
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "GPSログ取得：${if (viewModel.gpsLoggingEnabled.value) "ON" else "OFF"}", // ✅ 修正
+                fontSize = 16.sp,
+                color = MaterialTheme.colors.onBackground
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Switch(
+                modifier = Modifier.padding(end = 4.dp),
+                checked = viewModel.gpsLoggingEnabled.value, // ✅ 修正
+                onCheckedChange = { isChecked ->
+                    onGpsLoggingToggle(isChecked)
+                },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color(0xFF42A5F5),
+                    checkedTrackColor = Color(0xFF1976D2),
+                    uncheckedThumbColor = Color(0xFFCCCCCC),
+                    uncheckedTrackColor = Color(0xFF888888)
+                )
             )
         }
     }

@@ -13,8 +13,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.darkColors
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
@@ -32,8 +35,9 @@ class MainActivity : ComponentActivity() {
         if (locationGranted) {
             val intent = Intent(this, GpsLoggingService::class.java).apply {
                 putExtra("low_power_mode", SharedState.currentLowPowerMode)
+                putExtra("gps_logging_enabled", SharedState.gpsLoggingEnabled)
             }
-            Log.d("MainActivity", "🚀 サービス起動要求（通知権限なしでも起動）")
+            Log.d("MainActivity", "🚀 サービス起動要求")
             ContextCompat.startForegroundService(this, intent)
         } else {
             Log.e("MainActivity", "❌ 位置情報権限がないためサービス起動不可")
@@ -66,13 +70,34 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme(colors = darkColors()) {
-                LocationScreen(locationViewModel) { lowPower ->
-                    SharedState.currentLowPowerMode = lowPower
-                    val intent = Intent(this, GpsLoggingService::class.java).apply {
-                        putExtra("low_power_mode", lowPower)
-                    }
-                    ContextCompat.startForegroundService(this, intent)
-                    Log.d("MainActivity", "🔁 ユーザー操作でサービス再起動（節電モード: $lowPower）")
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(WindowInsets.systemBars.asPaddingValues())
+                ) {
+                    val context = LocalContext.current
+                    LocationScreen(
+                        viewModel = locationViewModel,
+                        onLowPowerToggle = { lowPower ->
+                            SharedState.currentLowPowerMode = lowPower
+                            val intent = Intent(context, GpsLoggingService::class.java).apply {
+                                putExtra("low_power_mode", lowPower)
+                                putExtra("gps_logging_enabled", SharedState.gpsLoggingEnabled)
+                            }
+                            ContextCompat.startForegroundService(context, intent)
+                            Log.d("MainActivity", "🔁 節電モード変更: $lowPower")
+                        },
+                        onGpsLoggingToggle = { enabled ->
+                            SharedState.gpsLoggingEnabled = enabled
+                            locationViewModel.toggleGpsLogging(enabled) // ✅ 最小限の追加
+                            val intent = Intent(context, GpsLoggingService::class.java).apply {
+                                putExtra("gps_logging_enabled", enabled)
+                                putExtra("low_power_mode", SharedState.currentLowPowerMode)
+                            }
+                            ContextCompat.startForegroundService(context, intent)
+                            Log.d("MainActivity", "🔁 GPSログ取得状態変更: $enabled")
+                        }
+                    )
                 }
             }
         }
@@ -109,11 +134,13 @@ class MainActivity : ComponentActivity() {
         locationViewModel.updateLocationText(SharedState.latestLocationText)
         locationViewModel.updateSatelliteText(SharedState.latestSatelliteText)
         locationViewModel.toggleLowPowerMode(SharedState.currentLowPowerMode)
+        locationViewModel.toggleGpsLogging(SharedState.gpsLoggingEnabled) // ✅ 最小限の追加
 
         val intent = Intent(this, GpsLoggingService::class.java).apply {
             putExtra("low_power_mode", SharedState.currentLowPowerMode)
+            putExtra("gps_logging_enabled", SharedState.gpsLoggingEnabled)
         }
         ContextCompat.startForegroundService(this, intent)
-        Log.d("MainActivity", "🔁 onResumeでサービス再起動（節電モード: ${SharedState.currentLowPowerMode}）")
+        Log.d("MainActivity", "🔁 onResumeでサービス再起動")
     }
 }
