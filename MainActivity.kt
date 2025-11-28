@@ -30,7 +30,9 @@ class MainActivity : ComponentActivity() {
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
 
         if (locationGranted) {
-            val intent = Intent(this, GpsLoggingService::class.java)
+            val intent = Intent(this, GpsLoggingService::class.java).apply {
+                putExtra("low_power_mode", SharedState.currentLowPowerMode)
+            }
             Log.d("MainActivity", "🚀 サービス起動要求（通知権限なしでも起動）")
             ContextCompat.startForegroundService(this, intent)
         } else {
@@ -56,15 +58,22 @@ class MainActivity : ComponentActivity() {
 
         uiHandler.post(object : Runnable {
             override fun run() {
-                locationViewModel.updateLocationText(GpsLoggingService.latestLocationText)
-                locationViewModel.updateSatelliteText(GpsLoggingService.latestSatelliteText)
+                locationViewModel.updateLocationText(SharedState.latestLocationText)
+                locationViewModel.updateSatelliteText(SharedState.latestSatelliteText)
                 uiHandler.postDelayed(this, 5000)
             }
         })
 
         setContent {
             MaterialTheme(colors = darkColors()) {
-                LocationScreen(locationViewModel)
+                LocationScreen(locationViewModel) { lowPower ->
+                    SharedState.currentLowPowerMode = lowPower
+                    val intent = Intent(this, GpsLoggingService::class.java).apply {
+                        putExtra("low_power_mode", lowPower)
+                    }
+                    ContextCompat.startForegroundService(this, intent)
+                    Log.d("MainActivity", "🔁 ユーザー操作でサービス再起動（節電モード: $lowPower）")
+                }
             }
         }
     }
@@ -91,15 +100,20 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        // stopService(Intent(this, GpsLoggingService::class.java)) ← 削除
         uiHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
 
     override fun onResume() {
         super.onResume()
-        locationViewModel.updateLocationText(GpsLoggingService.latestLocationText)
-        locationViewModel.updateSatelliteText(GpsLoggingService.latestSatelliteText)
-    }
+        locationViewModel.updateLocationText(SharedState.latestLocationText)
+        locationViewModel.updateSatelliteText(SharedState.latestSatelliteText)
+        locationViewModel.toggleLowPowerMode(SharedState.currentLowPowerMode)
 
+        val intent = Intent(this, GpsLoggingService::class.java).apply {
+            putExtra("low_power_mode", SharedState.currentLowPowerMode)
+        }
+        ContextCompat.startForegroundService(this, intent)
+        Log.d("MainActivity", "🔁 onResumeでサービス再起動（節電モード: ${SharedState.currentLowPowerMode}）")
+    }
 }
