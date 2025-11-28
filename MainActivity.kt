@@ -4,10 +4,12 @@ import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.preference.PreferenceManager
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -27,17 +29,11 @@ class MainActivity : ComponentActivity() {
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        Log.d("MainActivity", "📋 権限結果: $permissions")
-
         val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
 
         if (locationGranted) {
-            val intent = Intent(this, GpsLoggingService::class.java).apply {
-                putExtra("low_power_mode", SharedState.currentLowPowerMode)
-                putExtra("gps_logging_enabled", SharedState.gpsLoggingEnabled)
-            }
-            Log.d("MainActivity", "🚀 サービス起動要求")
+            val intent = Intent(this, GpsLoggingService::class.java)
             ContextCompat.startForegroundService(this, intent)
         } else {
             Log.e("MainActivity", "❌ 位置情報権限がないためサービス起動不可")
@@ -79,23 +75,14 @@ class MainActivity : ComponentActivity() {
                     LocationScreen(
                         viewModel = locationViewModel,
                         onLowPowerToggle = { lowPower ->
-                            SharedState.currentLowPowerMode = lowPower
-                            val intent = Intent(context, GpsLoggingService::class.java).apply {
-                                putExtra("low_power_mode", lowPower)
-                                putExtra("gps_logging_enabled", SharedState.gpsLoggingEnabled)
-                            }
+                            locationViewModel.toggleLowPowerMode(lowPower, context)
+                            val intent = Intent(context, GpsLoggingService::class.java)
                             ContextCompat.startForegroundService(context, intent)
-                            Log.d("MainActivity", "🔁 節電モード変更: $lowPower")
                         },
                         onGpsLoggingToggle = { enabled ->
-                            SharedState.gpsLoggingEnabled = enabled
-                            locationViewModel.toggleGpsLogging(enabled) // ✅ 最小限の追加
-                            val intent = Intent(context, GpsLoggingService::class.java).apply {
-                                putExtra("gps_logging_enabled", enabled)
-                                putExtra("low_power_mode", SharedState.currentLowPowerMode)
-                            }
+                            locationViewModel.toggleGpsLogging(enabled, context)
+                            val intent = Intent(context, GpsLoggingService::class.java)
                             ContextCompat.startForegroundService(context, intent)
-                            Log.d("MainActivity", "🔁 GPSログ取得状態変更: $enabled")
                         }
                     )
                 }
@@ -118,9 +105,6 @@ class MainActivity : ComponentActivity() {
 
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
-
-            val registered = manager.getNotificationChannel("gps_logging_channel")
-            Log.d("MainActivity", "✅ 通知チャンネル登録: importance=${registered?.importance}")
         }
     }
 
@@ -133,14 +117,15 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         locationViewModel.updateLocationText(SharedState.latestLocationText)
         locationViewModel.updateSatelliteText(SharedState.latestSatelliteText)
-        locationViewModel.toggleLowPowerMode(SharedState.currentLowPowerMode)
-        locationViewModel.toggleGpsLogging(SharedState.gpsLoggingEnabled) // ✅ 最小限の追加
 
-        val intent = Intent(this, GpsLoggingService::class.java).apply {
-            putExtra("low_power_mode", SharedState.currentLowPowerMode)
-            putExtra("gps_logging_enabled", SharedState.gpsLoggingEnabled)
-        }
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        val lowPower = prefs.getBoolean("low_power_mode", true)
+        val gpsLogging = prefs.getBoolean("gps_logging_enabled", true)
+
+        locationViewModel.toggleLowPowerMode(lowPower, this)
+        locationViewModel.toggleGpsLogging(gpsLogging, this)
+
+        val intent = Intent(this, GpsLoggingService::class.java)
         ContextCompat.startForegroundService(this, intent)
-        Log.d("MainActivity", "🔁 onResumeでサービス再起動")
     }
 }

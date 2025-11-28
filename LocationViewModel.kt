@@ -1,5 +1,7 @@
 package com.example.savegpsdata
 
+import android.content.Context
+import android.preference.PreferenceManager
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
@@ -15,7 +17,6 @@ class LocationViewModel : ViewModel() {
     val lowPowerMode: State<Boolean> = _lowPowerMode
 
     private val _gpsLoggingEnabled = mutableStateOf(true)
-
     val gpsLoggingEnabled: State<Boolean> = _gpsLoggingEnabled
 
     fun updateLocationText(text: String) {
@@ -26,13 +27,15 @@ class LocationViewModel : ViewModel() {
         _satelliteText.value = text
     }
 
-    fun toggleLowPowerMode(enabled: Boolean) {
+    fun toggleLowPowerMode(enabled: Boolean, context: Context) {
         _lowPowerMode.value = enabled
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        prefs.edit().putBoolean("low_power_mode", enabled).apply()
     }
 
-    fun toggleGpsLogging(enabled: Boolean) {
+    fun toggleGpsLogging(enabled: Boolean, context: Context) {
         _gpsLoggingEnabled.value = enabled
-        SharedState.gpsLoggingEnabled = enabled
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        prefs.edit().putBoolean("gps_logging_enabled", enabled).apply()
     }
-
 }

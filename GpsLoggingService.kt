@@ -3,6 +3,7 @@ package com.example.savegpsdata
 import android.app.Service
 import android.content.Intent
 import android.os.*
+import android.preference.PreferenceManager
 import androidx.core.content.ContextCompat
 import java.io.File
 import java.text.SimpleDateFormat
@@ -16,26 +17,25 @@ class GpsLoggingService : Service() {
     private lateinit var wakeLock: PowerManager.WakeLock
     private val notificationHandlerLoop = Handler(Looper.getMainLooper())
 
-    private lateinit var batteryLogger: BatteryLogger // ✅ 追加
-    private val batteryLogLoop = Handler(Looper.getMainLooper()) // ✅ 追加
+    private lateinit var batteryLogger: BatteryLogger
+    private val batteryLogLoop = Handler(Looper.getMainLooper())
 
     override fun onCreate() {
         debugLogger = DebugLogger()
+
         gnssHandler = GnssHandler(this, debugLogger)
         notificationHandler = NotificationHandler(this, debugLogger)
         locationHandler = LocationHandler(this, debugLogger)
 
-        val timestampForFile = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         val dir = Environment.getExternalStorageDirectory().resolve("Download")
         dir.mkdirs()
-        locationHandler.logFile = File(dir, "gps1_log_$timestampForFile.log")
-        debugLogger.debugLogFile = File(dir, "gps_debug_$timestampForFile.log")
+        locationHandler.logFile = File(dir, "gps1_log_$timestamp.log")
+        debugLogger.debugLogFile = File(dir, "gps_debug_$timestamp.log")
 
-        batteryLogger = BatteryLogger(this) // ✅ 追加
-        val batteryLogFileName = "battery_log_$timestampForFile.log" // ✅ 追加
-        batteryLogger.logFile = dir.resolve(batteryLogFileName) // ✅ 追加
-
-        batteryLogLoop.post(object : Runnable { // ✅ 追加
+        batteryLogger = BatteryLogger(this)
+        batteryLogger.logFile = dir.resolve("battery_log_$timestamp.log")
+        batteryLogLoop.post(object : Runnable {
             override fun run() {
                 batteryLogger.logBatteryLevel()
                 batteryLogLoop.postDelayed(this, 600_000)
@@ -47,7 +47,10 @@ class GpsLoggingService : Service() {
         wakeLock.acquire()
 
         notificationHandler.createNotificationChannel()
-        startForeground(NotificationHandler.NOTIFICATION_ID, notificationHandler.buildForegroundNotification("位置情報を記録中です"))
+        startForeground(
+            NotificationHandler.NOTIFICATION_ID,
+            notificationHandler.buildForegroundNotification("位置情報を記録中です")
+        )
 
         if (PermissionChecker.hasLocationPermission(this)) {
             locationHandler.startLocationUpdates()
@@ -62,7 +65,8 @@ class GpsLoggingService : Service() {
                 if (!notificationHandler.isAppInForeground()) {
                     notificationHandler.maybeUpdateNotification()
                 }
-                if (SharedState.gpsLoggingEnabled) { // ✅ 追加
+                val prefs = PreferenceManager.getDefaultSharedPreferences(applicationContext)
+                if (prefs.getBoolean("gps_logging_enabled", true)) {
                     locationHandler.monitorLocationGap()
                 }
                 notificationHandlerLoop.postDelayed(this, 60_000)
@@ -71,21 +75,19 @@ class GpsLoggingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NotificationHandler.NOTIFICATION_ID, notificationHandler.buildForegroundNotification("位置情報を記録中です"))
-        debugLogger.logDebug("🚀 onStartCommand 呼び出し")
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        val lowPower = prefs.getBoolean("low_power_mode", true)
+        val gpsLoggingEnabled = prefs.getBoolean("gps_logging_enabled", true)
 
-        val lowPower = intent?.getBooleanExtra("low_power_mode", false) ?: false
         locationHandler.setLowPowerMode(lowPower)
-        SharedState.currentLowPowerMode = lowPower
+        debugLogger.logDebug("🔄 位置更新設定変更（節電=$lowPower）")
         debugLogger.logDebug("⚙️ 節電モード: ${if (lowPower) "ON" else "OFF"}")
 
-        val gpsLoggingEnabled = intent?.getBooleanExtra("gps_logging_enabled", true) ?: true
         if (gpsLoggingEnabled) {
             locationHandler.startLocationUpdates()
         } else {
             locationHandler.stopLocationUpdates()
         }
-        SharedState.gpsLoggingEnabled = gpsLoggingEnabled
         debugLogger.logDebug("🚦 GPSログ取得: ${if (gpsLoggingEnabled) "ON" else "OFF"}")
 
         return START_STICKY
@@ -96,16 +98,14 @@ class GpsLoggingService : Service() {
         gnssHandler.unregister()
         if (wakeLock.isHeld) wakeLock.release()
         notificationHandlerLoop.removeCallbacksAndMessages(null)
-        batteryLogLoop.removeCallbacksAndMessages(null) // ✅ 追加
+        batteryLogLoop.removeCallbacksAndMessages(null)
         debugLogger.logDebug("🛑 WakeLock解放・サービス停止")
         super.onDestroy()
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        val restartIntent = Intent(applicationContext, GpsLoggingService::class.java).apply {
-            putExtra("low_power_mode", SharedState.currentLowPowerMode)
-        }
-        ContextCompat.startForegroundService(applicationContext, restartIntent)
+        val intent = Intent(applicationContext, GpsLoggingService::class.java)
+        ContextCompat.startForegroundService(applicationContext, intent)
         debugLogger.logDebug("🔄 サービス再起動（onTaskRemoved）")
     }
 

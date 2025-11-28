@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -15,6 +16,8 @@ fun LocationScreen(
     onLowPowerToggle: (Boolean) -> Unit,
     onGpsLoggingToggle: (Boolean) -> Unit
 ) {
+    val context = LocalContext.current
+
     Column(modifier = Modifier
         .fillMaxSize()
         .padding(16.dp)) {
@@ -47,7 +50,7 @@ fun LocationScreen(
                 modifier = Modifier.padding(end = 4.dp),
                 checked = viewModel.lowPowerMode.value,
                 onCheckedChange = { isChecked ->
-                    viewModel.toggleLowPowerMode(isChecked)
+                    viewModel.toggleLowPowerMode(isChecked, context)
                     onLowPowerToggle(isChecked)
                 },
                 colors = SwitchDefaults.colors(
@@ -70,14 +73,14 @@ fun LocationScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "GPSログ取得：${if (viewModel.gpsLoggingEnabled.value) "ON" else "OFF"}", // ✅ 修正
+                text = "GPSログ取得：${if (viewModel.gpsLoggingEnabled.value) "ON" else "OFF"}",
                 fontSize = 16.sp,
                 color = MaterialTheme.colors.onBackground
             )
             Spacer(modifier = Modifier.weight(1f))
             Switch(
                 modifier = Modifier.padding(end = 4.dp),
-                checked = viewModel.gpsLoggingEnabled.value, // ✅ 修正
+                checked = viewModel.gpsLoggingEnabled.value,
                 onCheckedChange = { isChecked ->
                     onGpsLoggingToggle(isChecked)
                 },
