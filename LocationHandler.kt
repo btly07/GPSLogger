@@ -1,22 +1,24 @@
 package com.example.savegpsdata
 
+import android.content.Context
 import android.location.Location
+import android.os.BatteryManager
 import com.google.android.gms.location.*
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
 class LocationHandler(
-    private val context: android.content.Context,
+    private val context: Context,
     private val debugLogger: DebugLogger
 ) {
     private val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
     private var lastSavedTime: Long = 0L
     var lastLocationTime: Long = System.currentTimeMillis()
     lateinit var logFile: java.io.File
-
     private var isLowPowerMode: Boolean = false
     private var locationRequest: LocationRequest = createLocationRequest(false)
+    private var sessionId: String = UUID.randomUUID().toString()
 
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
@@ -28,21 +30,10 @@ class LocationHandler(
             val now = System.currentTimeMillis()
             if (now - lastSavedTime >= SharedState.SAVE_INTERVAL_MS) {
                 lastSavedTime = now
-                val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(location.time))
-                SharedState.latestLocationText = """
-                    時刻: $timestamp
-                    緯度: ${location.latitude}
-                    経度: ${location.longitude}
-                    高度: ${location.altitude} m
-                    精度: ${location.accuracy} m
-                    速度: ${location.speed} m/s
-                    方位: ${location.bearing}°
-                    Provider: ${location.provider}
-                """.trimIndent()
+                SharedState.latestLocationText = formatLocationText(location)
                 saveLocationToFile(location)
             }
 
-            // 精度が悪い状態が継続している場合も再登録を検討
             if (location.accuracy >= 100.0 && now - lastSavedTime > 5 * 60 * 1000L) {
                 debugLogger.logDebug("⚠️ 精度100.0mが継続 → 再登録を試行")
                 restartLocationUpdates()
@@ -98,14 +89,53 @@ class LocationHandler(
         }
     }
 
+    private fun formatLocationText(location: Location): String {
+        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(location.time))
+        val speedKmh = location.speed * 3.6
+        return """
+            時刻: $timestamp
+            緯度: ${location.latitude}
+            経度: ${location.longitude}
+            高度: ${location.altitude} m
+            精度: ${location.accuracy} m
+            速度: ${"%.3f".format(speedKmh)} km/h
+            方位: ${location.bearing}°
+            Provider: ${location.provider}
+        """.trimIndent()
+    }
+
     private fun saveLocationToFile(location: Location) {
         val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(location.time))
-        val line = "$timestamp,${location.latitude},${location.longitude},${location.altitude},${location.accuracy},${location.speed},${location.bearing},${location.provider},${location.isFromMockProvider}\n"
+        val speedKmh = location.speed * 3.6
+        val formattedSpeed = "%.3f".format(speedKmh)
+        val batteryLevel = getBatteryLevel()
+        val locationAge = System.currentTimeMillis() - location.time
+        val isStationary = location.speed < 0.5
+        val locationSource = when {
+            location.isFromMockProvider -> "Mock"
+            location.accuracy < 20 && location.speed > 0.5 -> "GPS"
+            location.accuracy < 50 && location.speed <= 0.5 -> "Wi-Fi"
+            else -> "Cell"
+        }
+
+        val line = "$timestamp,${location.latitude},${location.longitude},${location.altitude},${location.accuracy}," +
+                "$formattedSpeed,${location.bearing},${location.provider},${location.isFromMockProvider}," +
+                "$batteryLevel,$locationAge,${isStationary},$sessionId,$locationSource,$isLowPowerMode\n"
+
         try {
+            if (!logFile.exists()) {
+                logFile.writeText("timestamp,latitude,longitude,altitude,accuracy,speed_kmh,bearing,provider,isMock,batteryLevel,locationAge,isStationary,sessionId,locationSource,lowPowerMode\n")
+            }
             FileOutputStream(logFile, true).use { it.write(line.toByteArray()) }
             debugLogger.logDebug("✅ 保存成功: ${logFile.absolutePath}")
         } catch (e: Exception) {
             debugLogger.logDebug("❌ 保存失敗: ${e.message}")
         }
+    }
+
+
+    private fun getBatteryLevel(): Int {
+        val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+        return bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
     }
 }
